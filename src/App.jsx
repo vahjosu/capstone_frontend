@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import './App.css';
 
@@ -13,16 +13,73 @@ function App() {
     SHS: 0,
     EMPLOYEE: 0,
     VISITOR: 0,
-    TOTAL: 0
+    TOTAL: 0, // Total count based on Time In minus Time Out
   });
+
+  useEffect(() => {
+    fetchCounts();
+  }, []);
 
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loginError, setLoginError] = useState('');
-  const [nameInput, setNameInput] = useState(''); // State for the input field for Name
+
+  const [nameInput1, setNameInput1] = useState(''); // For Time In
+  const [nameInput2, setNameInput2] = useState(''); // For Time Out
 
   const navigate = useNavigate();
+
+  useEffect(() => {
+    fetchTotalVisitors(); // Fetch the total visitors on component mount
+  }, []);
+
+  const fetchTotalVisitors = async () => {
+    try {
+      const response = await fetch('http://localhost:8000/api/logs/count');
+      if (!response.ok) {
+        throw new Error(`Error fetching total visitors: ${response.statusText}`);
+      }
+      const data = await response.json();
+      
+      const total = Number(data.totalRemaining);
+      setCounts((prevCounts) => ({
+        ...prevCounts,
+        TOTAL: !isNaN(total) ? total : 0,
+      }));
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const fetchCounts = async () => {
+    const colleges = ['CITC', 'COT', 'CSTE', 'COM', 'CSM', 'CEA', 'SHS', 'EMPLOYEE', 'VISITOR'];
+
+    try {
+      const counts = await Promise.all(
+        colleges.map(async (college) => {
+          const response = await fetch(`http://localhost:8000/api/logs/count/${college}`);
+          if (!response.ok) throw new Error(`Error fetching ${college} count: ${response.statusText}`);
+          const data = await response.json();
+          
+          console.log(`Fetched count for ${college}:`, data); // Log fetched data
+
+          return { college, count: Number(data.totalRemaining) }; // Convert to number
+        })
+      );
+
+      const countsObject = counts.reduce((acc, { college, count }) => {
+        acc[college] = !isNaN(count) ? count : 0; // Ensure count is a number
+        return acc;
+      }, {});
+
+      console.log('Counts Object:', countsObject); // Log the final counts object
+
+      setCounts((prevCounts) => ({ ...prevCounts, ...countsObject }));
+    } catch (error) {
+      console.error(error);
+    }
+  };
 
   const handleLogin = () => {
     if (username === 'admin' && password === 'admin') {
@@ -41,31 +98,59 @@ function App() {
     setShowLoginModal(false);
   };
 
-  const handleLogSubmit = async () => {
+  const handleTimeInSubmit = async () => {
     try {
-        const response = await fetch('http://localhost:8000/api/log', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name: nameInput }) // Send the name as JSON
-        });
+      const response = await fetch('http://localhost:8000/api/timein', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: nameInput1, logType: "Time In" }), // Include logType
+      });
 
-        if (!response.ok) {
-            const errorMessage = await response.text(); // Get error response text
-            throw new Error(`Error: ${errorMessage}`);
-        }
+      if (!response.ok) {
+        const errorMessage = await response.text();
+        throw new Error(`Error: ${errorMessage}`);
+      }
 
-        const result = await response.json();
-        if (result.success) {
-            alert('Visitor data successfully logged.');
-            setNameInput(''); // Clear input after successful submission
-        } else {
-            alert(result.error);
-        }
+      const result = await response.json();
+      if (result.success) {
+        alert('Visitor data successfully logged as Time In.');
+        setNameInput1(''); // Clear input after successful submission
+        fetchTotalVisitors(); // Update total count after successful submission
+      } else {
+        alert(result.error);
+      }
     } catch (error) {
-        console.error('Error:', error);
-        alert('An error occurred while logging data: ' + error.message);
+      console.error('Error:', error);
+      alert('An error occurred while logging data: ' + error.message);
     }
-};
+  };
+
+  const handleTimeOutSubmit = async () => {
+    try {
+      const response = await fetch('http://localhost:8000/api/timeout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: nameInput2, logType: "Time Out" }), // Include logType
+      });
+
+      if (!response.ok) {
+        const errorMessage = await response.text();
+        throw new Error(`Error: ${errorMessage}`);
+      }
+
+      const result = await response.json();
+      if (result.success) {
+        alert('Visitor Time Out successfully logged.');
+        setNameInput2(''); // Clear input after successful submission
+        fetchTotalVisitors(); // Update total count after successful submission
+      } else {
+        alert(result.error);
+      }
+    } catch (error) {
+      console.error('Error:', error);
+      alert('An error occurred while logging Time Out: ' + error.message);
+    }
+  };
 
   return (
     <div className="main-container">
@@ -82,17 +167,24 @@ function App() {
       </div>
       <div className="mid2-container">
         <div className="box2">
-          <label className="box2-label">Enter Name:</label>
           <input
             type="text"
-            value={nameInput}
-            onChange={(e) => setNameInput(e.target.value)} // Update nameInput state
+            value={nameInput1}
+            onChange={(e) => setNameInput1(e.target.value)}
             placeholder="Enter Name"
             className="b1"
           />
-          <button onClick={handleLogSubmit}>Log Visitor</button> {/* Button to trigger log submission */}
+          <button onClick={handleTimeInSubmit}>Time In</button>
+
+          <input
+            type="text"
+            value={nameInput2}
+            onChange={(e) => setNameInput2(e.target.value)}
+            placeholder="Enter Name"
+            className="b1"
+          />
+          <button onClick={handleTimeOutSubmit}>Time Out</button>
         </div>
-        {/* Other input boxes */}
         <div className="box2">
           <label className="box2-label">BOX 2</label>
         </div>
